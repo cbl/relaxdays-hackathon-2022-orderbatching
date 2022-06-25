@@ -16,7 +16,7 @@ pub struct Solution {
     #[serde(skip_serializing)]
     pub model: Model,
 
-    // #[serde(skip_serializing)]
+    #[serde(skip_serializing)]
     pub wave_warehouse_batch: HashMap<WaveId, HashMap<Warehouse, BatchId>>,
 
     #[serde(skip_serializing)]

@@ -128,7 +128,7 @@ pub struct Batch {
     #[serde(rename = "BatchVolume")]
     pub volume: Volume,
 
-    // #[serde(skip_serializing)]
+    #[serde(skip_serializing)]
     pub warehouse_aisles: HashMap<Warehouse, HashSet<Aisle>>,
 }
 
@@ -166,16 +166,16 @@ impl Batch {
         self.items.push(Item { order_id, article_id });
         self.volume = self.volume + volume;
 
-        match self.warehouse_aisles.get_mut(&warehouse) {
-            Some(aisles) => { 
-                aisles.insert(aisle);
-            },
-            None => {
-                self.warehouse_aisles.insert(
-                    warehouse, HashSet::from_iter(vec![aisle].into_iter())
-                );
-            },
-        };
+        // match self.warehouse_aisles.get_mut(&warehouse) {
+        //     Some(aisles) => { 
+        //         aisles.insert(aisle);
+        //     },
+        //     None => {
+        //         self.warehouse_aisles.insert(
+        //             warehouse, HashSet::from_iter(vec![aisle].into_iter())
+        //         );
+        //     },
+        // };
     }
 
     pub fn get_order_ids(&self) -> Vec<OrderId> {
