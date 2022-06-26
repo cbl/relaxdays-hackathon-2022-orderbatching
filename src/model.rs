@@ -159,23 +159,10 @@ impl Batch {
     pub fn push(&mut self, 
         order_id: OrderId, 
         article_id: ArticleId,
-        warehouse: Warehouse,
-        aisle: Aisle,
         volume: Volume
     ) {
         self.items.push(Item { order_id, article_id });
         self.volume = self.volume + volume;
-
-        // match self.warehouse_aisles.get_mut(&warehouse) {
-        //     Some(aisles) => { 
-        //         aisles.insert(aisle);
-        //     },
-        //     None => {
-        //         self.warehouse_aisles.insert(
-        //             warehouse, HashSet::from_iter(vec![aisle].into_iter())
-        //         );
-        //     },
-        // };
     }
 
     pub fn get_order_ids(&self) -> Vec<OrderId> {
@@ -203,6 +190,11 @@ pub struct Model {
 
     pub orders: Vec<Order>,
 
+    /// List of warehouse => \[order\] mappings
+    /// 
+    /// The outer vector index indictates the sorting priority.
+    /// The mappings indicate that for a given warehouse(-id)
+    /// there exists orders, that contain mostly articles from that warehouse.
     pub warehouse_orders: Vec<HashMap<Warehouse, Vec<OrderId>>>
 }
 
@@ -240,7 +232,6 @@ impl From<Input> for Model {
                     }
                 }
 
-
                 let heap = BinaryHeap::from(
                     map
                         .into_iter()
@@ -259,9 +250,9 @@ impl From<Input> for Model {
         
         
         for (order_id, warehouses) in order_warehouses.iter().enumerate() {
-            for (p, (n, warehouse)) in warehouses.iter().enumerate() {
+            for (priority, (_, warehouse)) in warehouses.iter().enumerate() {
                 warehouse_orders
-                    .get_mut(p)
+                    .get_mut(priority)
                     .unwrap()
                     .get_mut(warehouse)
                     .unwrap()

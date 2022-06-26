@@ -1,9 +1,7 @@
-use std::{collections::{HashSet, HashMap}, hash::{Hash, Hasher, self}};
-use serde::{Serialize, Deserialize};
-use fxhash::{hash32, FxBuildHasher};
-use linked_hash_set::LinkedHashSet;
+use std::{collections::{HashSet, HashMap}, hash::{Hash, Hasher}};
+use serde::{Serialize};
 
-use crate::{model::{Wave, Batch, Model, Cost, Warehouse, BatchId, ArticleId, OrderId, WaveId, Order, Aisle}, config::{MAX_BATCH_VOLUME, MAX_WAVE_SIZE}};
+use crate::{model::*, config::{MAX_BATCH_VOLUME, MAX_WAVE_SIZE}};
 
 #[derive(Clone, Serialize, Debug)]
 pub struct Solution {
@@ -16,9 +14,11 @@ pub struct Solution {
     #[serde(skip_serializing)]
     pub model: Model,
 
+    /// Mapping from waves to (Mapping from warehouses to batch)
     #[serde(skip_serializing)]
     pub wave_warehouse_batch: HashMap<WaveId, HashMap<Warehouse, BatchId>>,
 
+    /// Mapping from warehouses to wave
     #[serde(skip_serializing)]
     pub warehouse_wave: HashMap<Warehouse, WaveId>
 }
@@ -86,65 +86,32 @@ impl Solution {
         self.tour_cost() + self.rest_cost()
     }
 
-    pub fn next_wave_id(&self) -> WaveId {
+    pub(crate) fn next_wave_id(&self) -> WaveId {
         self.waves.len()
     }
 
-    pub fn get_possible_batch_waves(&self, batch: &BatchId) -> Vec<Option<&Wave>> {
-        Vec::new()
-    }
-
-    pub fn get_possible_article_batches(&self) -> Vec<Option<&Batch>> {
-        let mut batches = self.batches
-            .iter()
-            .map(|batch| Some(batch))
-            .collect::<Vec<Option<&Batch>>>();
-
-        batches.push(None);
-
-        batches
-    }
-
-    fn push_to_wave_or_create(&mut self, batch: Option<&Batch>) {
-        // if let Some(b) = batch {
-        //     let wave = Wave::from((self, b));
-        // }
-    }
-
-    fn new_wave() {
-
-    }
-
-    pub fn get_batch_wave(&self, batch: &Batch) -> Option<&Wave> {
-        // find wave for batch if not exists return None
-        None
-    }
-
-    pub fn create_wave_for_batch(&mut self, batch: &Batch) {
-        self.waves.push(self.new_wave_for_batch(batch))
-    }
-
-    fn new_wave_for_batch(&self, batch: &Batch) -> Wave {
-        Wave::from((self, batch))
-    }
-
+    /// Insert an article into a batch
+    /// 
+    /// Inserts the article `article_id` from `order_id` (which will ba handled in waive `waive_id`)
+    /// into a batch.
+    /// have most articles from `warehouse`.
+    /// If no such waive exists, a new wave will be instantiated.
     pub fn make_batch_for(&mut self, order_id: OrderId, article_id: ArticleId, wave_id: &WaveId) {
         let article_location = self.model.article_locations
             .get(&article_id)
             .unwrap();
 
         let warehouse: Warehouse = article_location.warehouse;
-        let aisle: Aisle = article_location.aisle;
-        let volume = self.model.article_volumes.get(&article_id).unwrap();
+        let article_volume = self.model.article_volumes.get(&article_id).unwrap();
 
         let mut batch_id = self.batches.len();
 
         // when no batch exists, create new one
-        if(batch_id == 0) {
+        if batch_id == 0 {
             self.batches.push(Batch::new(0));
             self.waves.get_mut(*wave_id).unwrap().batch_ids.push(batch_id);
         } else if let Some(bid) = self.wave_warehouse_batch.get(wave_id).unwrap().get(&warehouse) {
-            if (self.batches.get(*bid).unwrap().volume + volume) > MAX_BATCH_VOLUME {
+            if (self.batches.get(*bid).unwrap().volume + article_volume) > MAX_BATCH_VOLUME {
                 self.batches.push(Batch::new(batch_id));
                 self.waves.get_mut(*wave_id).unwrap().batch_ids.push(batch_id);
             } else {
@@ -155,62 +122,55 @@ impl Solution {
             self.waves.get_mut(*wave_id).unwrap().batch_ids.push(batch_id);
         }
 
+        let volume = self.model.article_volumes.get(&article_id).unwrap();
         self.batches.get_mut(batch_id).unwrap().push(
-            order_id, article_id,
-            article_location.warehouse, 
-            article_location.aisle,
-            *volume
+            order_id,
+            article_id,
+            *volume,
         );
+
         self.wave_warehouse_batch
             .get_mut(wave_id)
             .unwrap()
             .insert(warehouse, batch_id);
     }
 
-    pub fn make_wave_for(&mut self, order_id: OrderId, warehouse: Warehouse) -> bool {
-        let mut wave_id = self.waves.len();
+    /// Insert a order into a wave
+    /// 
+    /// Inserts the order w/ `order_id` into a wave that already contains oders that also
+    /// have most articles from `warehouse`.
+    /// If no such waive exists, a new wave will be instantiated.
+    pub fn make_wave_for(&mut self, order_id: OrderId, warehouse: Warehouse) {
+        let wave_id = self.waves.len();
         let order = self.model.orders.get(order_id).unwrap();
 
         if let Some(wid) = self.warehouse_wave.get(&warehouse) {
             let wave = self.waves.get_mut(*wid).unwrap();
 
             if (wave.size + order.article_ids.len()) > MAX_WAVE_SIZE {
-                self.waves.push(Wave::new(wave_id));
+                let mut new_wave = Wave::new(wave_id);
+                new_wave.push_order(order);
+                self.waves.push(new_wave);
                 self.wave_warehouse_batch.insert(wave_id, HashMap::default());
-                self.waves.get_mut(wave_id).unwrap().push_order(order);
                 self.warehouse_wave.insert(warehouse, wave_id);
             } else {
                 wave.push_order(order);
             }
-
-            return true;
         } else {
-            self.waves.push(Wave::new(wave_id));
+            let mut new_wave = Wave::new(wave_id);
+            new_wave.push_order(order);
+            self.waves.push(new_wave);
             self.wave_warehouse_batch.insert(wave_id, HashMap::default());
-            self.waves.get_mut(wave_id).unwrap().push_order(order);
             self.warehouse_wave.insert(warehouse, wave_id);
-
-            return true;
         }
-
-        return false;
     }
 
 }
 
 pub fn search(solution: &mut Solution, model: &Model) {
-    // let tabu: LinkedHashSet<u32, FxBuildHasher> = LinkedHashSet::default();
-
-    // Step 1: Artikel in batches aufteilen
-    
-
-    // Step 1: Orders in waves aufteilen
-
     // 1. Orders nach warehouses sortieren
     // 2. Orders auf waves aufteilen bis sie voll sind
     // 3. Batches für die orders finden
-
-    // let mut missing_orders: Vec<OrderId> = vec![];
 
     model.warehouse_orders
         .get(0)
@@ -218,9 +178,7 @@ pub fn search(solution: &mut Solution, model: &Model) {
         .iter()
         .for_each(|(warehouse, order_ids)| {
             for order_id in order_ids {
-                if !solution.make_wave_for(*order_id, *warehouse) {
-                    // missing_orders.push(*order_id);
-                }
+                solution.make_wave_for(*order_id, *warehouse)
             }
         });
 

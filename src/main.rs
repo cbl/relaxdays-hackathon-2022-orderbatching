@@ -9,7 +9,7 @@ fn main() {
     let args: Vec<String> = env::args().collect();
 
     let input_file = args.get(1).expect("Missing input file name.");
-    let output_file = args.get(2).expect("Missing input file name.");
+    let output_file = args.get(2).expect("Missing output file name.");
 
     let input = fs::read_to_string(input_file).unwrap();
 
@@ -25,7 +25,6 @@ fn main() {
 
     fs::write(output_file, output).expect("Unable to write file");
 
-    // println!("Hello, world!");
     // println!("articles = {:?}", model.orders.iter().map(|o|o.article_ids.len()).sum::<usize>());
     // println!("orders = {:?}", model.orders.len());
 
